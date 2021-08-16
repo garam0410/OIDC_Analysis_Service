@@ -4,7 +4,7 @@ DATABASES = {
         'NAME': 'bpm',
         'USER': 'root',
         'PASSWORD': 'bpmservice',
-        'HOST': '27.96.130.250',
+        'HOST': '118.67.132.152',
         'PORT': '3306'
     }
 }

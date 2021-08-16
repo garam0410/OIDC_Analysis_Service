@@ -24,3 +24,10 @@ def clu(request):
 def cal(request):
     cal = calaver()
     return render(request, 'calaver.html', {'cal' : cal})
+
+def rec(request):
+    param = request.GET.get('uid', None)
+    print(param)
+    rec = reccomand(param)
+    return render(request, 'reccomand.html', {'rec' : rec})
+

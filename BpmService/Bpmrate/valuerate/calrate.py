@@ -11,37 +11,44 @@ from sklearn import preprocessing
 from sqlalchemy import create_engine
 import schedule
 import time
+import threading
+import random
+import datetime as dt
 
 
 # 평균 계산
 def calaver():
+
+    print("---------------")
+    print("cal")
+    re = "calaver success"
     
     try:
-        print("cal")
-        avlist = []
-        result = []
-        re = "calaver success"
         
-        #mid 최댓값, 최소값
-        midMx = Movieinfo.objects.aggregate(mid=Max('mid'))
-        midmx = Movieinfo.objects.aggregate(mid=Min('mid'))
+        #mid 전체 호출
+        midMx = Movieinfo.objects.values('mid')
         
-        
-        for i in range(midmx['mid'], midMx['mid']+1):
+        for i in range(0 , len(midMx)):
             
-            #mid = i 인 영화의 러닝타임
-            runti = Movieinfo.objects.filter(mid = i).aggregate(runningtime = Max('runningtime'))
-            
+            #nmid = 현재 영화의 mid와 mid = nmid 인 영화의 러닝타임
+            nmid = midMx[i]['mid']
+            runti = Movieinfo.objects.filter(mid = nmid).aggregate(runningtime = Max('runningtime'))
+
+            #초기화
+            avlist = [0 for row in range(runti['runningtime'])]
+            result = []
 
             #Data 존재 Check
-            datacheck = Bpmdata.objects.filter(mid = i).values_list('bpm', flat=True)
+            datacheck = [0 for row in range(runti['runningtime'])]
+            datacheck = Bpmdata.objects.filter(mid = nmid).values_list('bpm', flat=True)
 
             #최소 10명이 시청 했을 시 분석 시작
             if(len(datacheck) > 10):
                 
                 #mid = i 인 전체 데이터 호출
-                result = Bpmdata.objects.filter(mid = i).values('bpm')
+                result = Bpmdata.objects.filter(mid = nmid).values('bpm')
                 pnumb = len(result)
+                
                 #slist라는 2차원 배열 선언 (행은 측정자 수, 열은 영화 상영시간)
                 slist = [[0 for col in range(runti['runningtime'])] for row in range(pnumb)]
                 
@@ -58,54 +65,133 @@ def calaver():
                     for l in range(0, pnumb):
 
                         sumval += int(slist[l][k])
-                    
-                    avlist.insert(k, sumval / pnumb)
+                        
+                    avlist[k] = sumval / pnumb
+                
                 
                 #평균 수치 전부 삭제 후 새로이 저장
-                m = Moviegraph.objects.filter(mid=i).all()
+                m = []
+                m = Moviegraph.objects.filter(mid=nmid).all()
                 m.delete()
-
+                
                 for j in range(0, len(avlist)):
 
-                    mi = Moviegraph(mid = Movieinfo.objects.get(mid=i), bpm = avlist[j])
+                    mi = Moviegraph(mid = Movieinfo.objects.get(mid=nmid), bpm = avlist[j])
                     mi.save()
-                print("done")
-        return re
 
     except Exception as e:
-        print(e)
 
+        print(e)
+        print("calaver failed")
+        print("----------------")
+
+    print(dt.datetime.now())
+    print(re)
+    print("----------------")
+
+    return
+# BPM 최댓값, 최솟값
+def Mdata():
+
+    print("----------------")
+    print('mda')
+    re = "Mdata Success"
+
+    try:
+
+        #mid
+        midMx = Movieinfo.objects.values('mid')
+        
+        for i in range(0, len(midMx)):
+            
+            #nmid = 현재 영화의 mid와 mid = nmid 인 영화의 러닝타임
+            nmid = midMx[i]['mid']
+            runti = Movieinfo.objects.filter(mid = nmid).aggregate(runningtime = Max('runningtime'))
+
+            datacheck = Bpmdata.objects.filter(mid = nmid).values_list('bpm', flat=True)
+
+            #datacheck 의 길이를 통해 DB에 bpm 데이터가 존재할 경우 실행.
+            if(len(datacheck) > 0):
+                
+                #mid = nmid 인 영화의 bpm 데이터
+                rdata = Bpmdata.objects.filter(mid = nmid).values('bpm')
+                pnumb = len(rdata)
+
+                # 행 = 측정자 수, 열 = 상영시간 을 가지는 2차원 배열 초기화
+                flist = [[0 for col in range(runti['runningtime'])] for row in range(pnumb)]
+
+                # 값 저장용 1차원 배열
+                singdlist = []
+
+                # 2차원 배열에 bpm 정보를 전부 split해서 저장
+                for j in range(0, pnumb):
+            
+                    flist.insert(j , rdata[j]['bpm'].split(','))
+
+                # 생성된 2차원 배열 값을 1차원 배열에 전부 저장
+                for k in range(0, pnumb):
+                    for l in range(0, runti['runningtime']):
+                        singdlist.append(int(flist[k][l]))
+                
+                # max, min method 통해 1차원 배열에서 최댓값, 최솟값 산출
+                MaxVal = max(singdlist)
+                MinVal = min(singdlist)
+                
+                # Model orm을 통해 db에 최댓값, 최솟값 저장
+                mi = Movieinfo.objects.get(mid = nmid)
+                mi.bmax = MaxVal
+                mi.bmin = MinVal
+                mi.save()
+
+    except Exception as e:
+
+        print(e)
+        print("Mdata failed")
+        print("----------------")
+
+    print(dt.datetime.now())
+    print(re)
+    print("----------------")
+
+    return 
+    
 # 클러스터링
 def cluster():
+
+    print("----------------")
+    print('clu')
+    re = "cluster Success"
     
     try:
         
-        engine = create_engine('mysql+pymysql://root:bpmservice@27.96.130.250/bpm', convert_unicode = True)
+        
+        engine = create_engine('mysql+pymysql://root:bpmservice@118.67.132.152/bpm', convert_unicode = True)
         conn = engine.connect()
-        re = "cluster success"
+        
 
-        #mid 최댓값, 최소값
-        midMx = Movieinfo.objects.aggregate(mid=Max('mid'))
-        midmx = Movieinfo.objects.aggregate(mid=Min('mid'))
+        #mid 
+        midMx = Movieinfo.objects.values('mid')
+        
 
-        for i in range(midmx['mid'], midMx['mid']+1):
+        for i in range(0, len(midMx)):
             
             
-            #mid = i 인 영화의 러닝타임
-            runti = Movieinfo.objects.filter(mid = i).aggregate(runningtime = Max('runningtime'))
+            #nmid = 현재 영화의 mid와 mid = nmid 인 영화의 러닝타임
+            nmid = midMx[i]['mid']
+            runti = Movieinfo.objects.filter(mid = nmid).aggregate(runningtime = Max('runningtime'))
 
             #점수 계산용 변수
             score = 0
 
-            #mid = i 인 영화의 사람 수
-            pcount = Bpmtest.objects.filter(mid = i).values_list('tid')
+            #mid = nmid 인 영화의 사람 수
+            pcount = Bpmtest.objects.filter(mid = nmid).values_list('tid')
             pnumb = len(pcount)
 
             #BPMDATA 테이블 전체 호출
             fdata = pd.read_sql_table('BPMDATA', conn)
 
-            #MID = i인 조건부 데이터 전처리
-            mdata = fdata[(fdata['MID'] == i)]
+            #MID = nmid인 조건부 데이터 전처리
+            mdata = fdata[(fdata['MID'] == nmid)]
             bpmsplit = mdata["BPM"].str.split(',')
             
             print("split")
@@ -167,80 +253,32 @@ def cluster():
 
             rpoint = score / pnumb
             
-            mi = Scoring.objects.get(mid = i)
+            mi = Scoring.objects.get(mid = nmid)
             mi.score = rpoint
             mi.save()
 
-            print("done")
-    except Exception as e:
-        print(e)
-
-    return re
-
-# BPM 최댓값, 최솟값
-def Mdata():
-
-
-    try:
-
-        re = "Mdata Success"
-        
-        #mid 최댓값, 최소값
-        midMx = Movieinfo.objects.aggregate(mid=Max('mid'))
-        midmx = Movieinfo.objects.aggregate(mid=Min('mid'))
-
-        
-        for i in range(midmx['mid'], midMx['mid']+1):
             
-            datacheck = Bpmdata.objects.filter(mid = i).values_list('bpm', flat=True)
-
-            #datacheck 의 길이를 통해 DB에 bpm 데이터가 존재할 경우 실행.
-            if(len(datacheck) > 0):
-
-                #mid = i 인 영화의 러닝타임
-                runti = Movieinfo.objects.filter(mid = i).aggregate(runningtime = Max('runningtime'))
-                
-                #mid = i 인 영화의 bpm 데이터
-                rdata = Bpmdata.objects.filter(mid = i).values('bpm')
-                pnumb = len(rdata)
-
-                # 행 = 측정자 수, 열 = 상영시간 을 가지는 2차원 배열 초기화
-                flist = [[0 for col in range(runti['runningtime'])] for row in range(pnumb)]
-
-                # 값 저장용 1차원 배열
-                singdlist = []
-
-                # 2차원 배열에 bpm 정보를 전부 split해서 저장
-                for j in range(0, pnumb):
-            
-                    flist.insert(j , rdata[j]['bpm'].split(','))
-
-                # 생성된 2차원 배열 값을 1차원 배열에 전부 저장
-                for k in range(0, pnumb):
-                    for l in range(0, runti['runningtime']):
-                        singdlist.append(int(flist[k][l]))
-                
-                # max, min method 통해 1차원 배열에서 최댓값, 최솟값 산출
-                MaxVal = max(singdlist)
-                MinVal = min(singdlist)
-                
-                # Model orm을 통해 db에 최댓값, 최솟값 저장
-                mi = Movieinfo.objects.get(mid = i)
-                mi.bmax = MaxVal
-                mi.bmin = MinVal
-                mi.save()
-
-                print("done")
     except Exception as e:
-        print(e)
 
-    return re
+        print(e)
+        print("cluster failed")
+        print("----------------")
+    
+    print(dt.datetime.now())
+    print(re)
+    print("----------------")
+
+    return 
 
 # Score에 따른 랭킹 지정
 def rating():
+
+    print("----------------")
+    print('rat')
+    re = "rating Success"
+
     try:
         
-        re = "rating success"
         # Scoring에 존재하는 데이터만 랭킹 지정
         ScoreList = Scoring.objects.order_by('mid').all().values_list('score', flat=True)
         MidList = Scoring.objects.order_by('mid').all().values_list('mid', flat=True)
@@ -266,9 +304,209 @@ def rating():
         
         
     except Exception as e:
+
         print(e)
+        print("rating failed")
+        print("----------------")
     
-    return re
+    print(dt.datetime.now())
+    print(re)
+    print("----------------")
+
+    return 
+
+# UID의 연령대에 따른 랜덤추천
+def reccomand(x):
+
+    print("----------------")
+    print('rec')
+    re = "reccomand Success"
+
+    # uid parameter를 받아와 int로 초기화
+    intx = int(x)
+
+    # 받아온 uid의 나이 인 uage 호출
+    uinfo = Userinfo.objects.filter(uid = intx).values('uage')
+
+    # 호출한 uage를 int로 초기화 해준 변수 age
+    age = int(uinfo[0]['uage'])
+
+    # 데이터 처리용 list, dict
+    rlist = []
+    mlist = []
+    recmid = []
+    rslist = []
+    firecmid = []
+    firectit = {}
+    result = []
+
+
+    try:
+
+        # 연령대 별로 구분 해놓은 alevel 값
+        alevel = 0
+
+        if(10 < age < 20):
+
+            alevel = 1
+
+        elif(20 < age < 30):
+
+            alevel = 2
+
+        elif(30 < age < 40):
+
+            alevel = 3
+
+        elif(40 < age < 50):
+
+            alevel = 4
+
+        elif(50 < age < 60):
+
+            alevel = 5
+
+        elif(60 < age < 70):
+
+            alevel = 6
+
+        
+        # 구분해놓은 alevel 즉 연령대에 해당하는 다른 유저 10명의 시청목록 호출
+        if(alevel == 1):
+
+            recuid = Userinfo.objects.filter(uage__range=(10, 20)).values('uid')
+            
+            
+            for a in range(0, len(recuid)):
+                rslist.append(recuid[a]['uid'])
+
+            rlist = random.sample(rslist, 10)
+            
+            
+            for i in range(0, 10):
+
+                mlist = Bpmtest.objects.filter(uid = rlist[i]).values('mid')
+                
+                for j in range(0, len(mlist)):
+                    recmid.append(mlist[j]['mid'])
+        
+        elif(alevel == 2):
+    
+            recuid = Userinfo.objects.filter(uage__range=(20, 30)).values('uid')
+            
+            
+            for a in range(0, len(recuid)):
+                rslist.append(recuid[a]['uid'])
+
+            
+            rlist = random.sample(rslist, 10)
+            
+            
+            for i in range(0, 10):
+
+                mlist = Bpmtest.objects.filter(uid = rlist[i]).values('mid')
+                
+                for j in range(0, len(mlist)):
+                    recmid.append(mlist[j]['mid'])
+        
+        elif(alevel == 3):
+    
+            recuid = Userinfo.objects.filter(uage__range=(30, 40)).values('uid')
+            
+            
+            for a in range(0, len(recuid)):
+                rslist.append(recuid[a]['uid'])
+
+            rlist = random.sample(rslist, 10)
+            
+            
+            for i in range(0, 10):
+
+                mlist = Bpmtest.objects.filter(uid = rlist[i]).values('mid')
+                
+                for j in range(0, len(mlist)):
+                    recmid.append(mlist[j]['mid'])
+
+        elif(alevel == 4):
+    
+            recuid = Userinfo.objects.filter(uage__range=(40, 50)).values('uid')
+            
+            
+            for a in range(0, len(recuid)):
+                rslist.append(recuid[a]['uid'])
+
+            rlist = random.sample(rslist, 10)
+            
+            
+            for i in range(0, 10):
+
+                mlist = Bpmtest.objects.filter(uid = rlist[i]).values('mid')
+                
+                for j in range(0, len(mlist)):
+                    recmid.append(mlist[j]['mid'])
+
+        elif(alevel == 5):
+    
+            recuid = Userinfo.objects.filter(uage__range=(50, 60)).values('uid')
+            
+            
+            for a in range(0, len(recuid)):
+                rslist.append(recuid[a]['uid'])
+
+            rlist = random.sample(rslist, 10)
+            
+            
+            for i in range(0, 10):
+
+                mlist = Bpmtest.objects.filter(uid = rlist[i]).values('mid')
+                
+                for j in range(0, len(mlist)):
+                    recmid.append(mlist[j]['mid'])
+
+        elif(alevel == 6):
+    
+            recuid = Userinfo.objects.filter(uage__range=(60, 70)).values('uid')
+            
+            
+            for a in range(0, len(recuid)):
+                rslist.append(recuid[a]['uid'])
+
+            rlist = random.sample(rslist, 10)
+            
+            
+            for i in range(0, 10):
+
+                mlist = Bpmtest.objects.filter(uid = rlist[i]).values('mid')
+                
+                for j in range(0, len(mlist)):
+                    recmid.append(mlist[j]['mid'])
+
+        # 호출한 10명의 시청목록을 중복 제거 후 랜덤으로 5개 산출
+        myset = set(recmid)
+        recmid = list(myset)
+        firecmid = random.sample(recmid, 5)
+        
+        # 웹페이지 전달을 위한 JSON 형태의 배열 생성
+        for p in range(0, 5):
+            
+            ti = Movieinfo.objects.filter(mid = firecmid[p]).values("title")
+            firectit = {"title" : ti[0]["title"]}
+            result.append(firectit)
+            
+    except Exception as e:
+
+        print(e)
+        print("rating failed")
+        print("----------------")
+
+    print(dt.datetime.now())
+    print(re)
+    print("----------------")
+
+    return result
+
+
+
 
 # schedule.every().day.at("00:00").do(Mdata)
 # schedule.every().day.at("01:00").do(calaver)
@@ -278,3 +516,4 @@ def rating():
 # while True:
 #     schedule.run_pending()
 #     time.sleep(1)
+
