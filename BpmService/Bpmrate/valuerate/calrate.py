@@ -89,7 +89,7 @@ def calaver():
     print(re)
     print("----------------")
 
-    return
+    return re
 # BPM 최댓값, 최솟값
 def Mdata():
 
@@ -153,7 +153,7 @@ def Mdata():
     print(re)
     print("----------------")
 
-    return 
+    return re
     
 # 클러스터링
 def cluster():
@@ -268,7 +268,7 @@ def cluster():
     print(re)
     print("----------------")
 
-    return 
+    return re
 
 # Score에 따른 랭킹 지정
 def rating():
