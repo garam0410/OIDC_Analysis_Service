@@ -313,7 +313,7 @@ def rating():
     print(re)
     print("----------------")
 
-    return 
+    return re
 
 # UID의 연령대에 따른 랜덤추천
 def reccomand(x):
